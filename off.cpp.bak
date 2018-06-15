@@ -10,35 +10,35 @@
 #include <math.h>
 #include <assert.h>
 
+
 #include<string>
 #include<vector>
 #include<iostream>
-#include<sstream>
 #pragma warning(disable:4996)
 using namespace std;
 #include <GL/gl.h>
 #include <GL/glu.h>
 #include <GL/glut.h>
-#include "loadBMP.h"
 #define     PI    3.1415926
+
 
 typedef struct Vertex {
 	float x, y, z;
 } Vertex;
 
-typedef struct face {
-	face(void) : nverts(0), verts(0) {};
+typedef struct Face {
+	Face(void) : nverts(0), verts(0) {};
 	int nverts;
 	Vertex **verts;
 	float normal[3];
-} face;
+} Face;
 
 typedef struct Mesh {
 	Mesh(void) : nverts(0), verts(0), nfaces(0), faces(0) {};
 	int nverts;
 	Vertex *verts;
 	int nfaces;
-	face *faces;
+	Face *faces;
 
 	vector<Vertex>point;
 
@@ -73,7 +73,7 @@ typedef struct MeshObj {
 typedef struct HE_face
 {
 	struct HE_edge *edge;  // one of the half-edges bordering the face
-	float normal[3];
+    float normal[3];
 
 } HE_face;
 typedef struct HE_vert
@@ -117,10 +117,9 @@ typedef struct HE_mesh {
 const char  *  filename ;
 static int objoroff = 0;
 
-int times;
 
 // GLUT variables
-char * mode;
+
 static int GLUTwindow = 0;
 static int GLUTwindow_height = 800;
 static int GLUTwindow_width = 800;
@@ -149,34 +148,8 @@ static float translation[3] = { 0.0, 0.0, -4.0 };
 static Mesh *mesh = NULL;
 static MeshObj * meshObj = NULL;
 static HE_mesh * HEMesh = NULL;
-static HE_mesh * newHE[6];
-static int simNum = 0;
-GLuint tex = 0;
+static HE_mesh * newHE = NULL;
 
-void ComputeNormal1(HE_face *face) {
-	face->normal[0] = face->normal[1] = face->normal[2] = 0;
-    HE_edge * edge1 = face->edge;
-    do{
-        HE_edge * edge2 = edge1->next;
-		face->normal[0] += (edge1->vert->y - edge2->vert->y) * (edge1->vert->z + edge2->vert->z);
-		face->normal[1] += (edge1->vert->z - edge2->vert->z) * (edge1->vert->x + edge2->vert->x);
-		face->normal[2] += (edge1->vert->x - edge2->vert->x) * (edge1->vert->y + edge2->vert->y);
-        edge1 = edge2;
-    }
-    while(edge1 != face->edge);
-
-	// Normalize normal for face
-	float squared_normal_length = 0.0;
-	squared_normal_length += face->normal[0] * face->normal[0];
-	squared_normal_length += face->normal[1] * face->normal[1];
-	squared_normal_length += face->normal[2] * face->normal[2];
-	float normal_length = sqrt(squared_normal_length);
-	if (normal_length > 1.0E-6) {
-		face->normal[0] /= normal_length;
-		face->normal[1] /= normal_length;
-		face->normal[2] /= normal_length;
-	}
-}
 HE_vert * findVert(const HE_mesh *HEMesh,float x,float y,float z) {
 	for (int i = 0; i < HEMesh->vert.size(); i++)
 	{
@@ -202,19 +175,9 @@ HE_edge * findPairEdge(const HE_mesh * _HEMesh,const HE_edge *_edge) {
 	for (int i = 0; i < _HEMesh->edge.size();i++)
 	{
         if(_edge->next->vert == _HEMesh->edge[i]->vert && _HEMesh->edge[i]->next->vert == _edge->vert)
-		    return  _HEMesh->edge[i];
+		_pairEdge = _HEMesh->edge[i];
 	}
-    return NULL;
-}
-HE_edge * findVertEdge(const HE_mesh * _HEMesh,const HE_vert * _vert) {
-	HE_edge * _edge ;
-	for (int i = 0; i < _HEMesh->edge.size();i++)
-	{
-        _edge = _HEMesh->edge[i];
-        if(_edge->vert == _vert)
-		    return _edge;
-	}
-    return NULL;
+    return _pairEdge;
 }
 
 void toHE(const MeshObj * mesh){
@@ -243,6 +206,7 @@ void toHE(const MeshObj * mesh){
         face->normal[0] = mesh->faces[i].normal[0];
         face->normal[1] = mesh->faces[i].normal[1];
         face->normal[2] = mesh->faces[i].normal[2];
+
 		HE_edge * lastEdge = new HE_edge();
 		HE_edge * firstEdge = lastEdge;
 		HEMesh->edge.push_back(firstEdge);
@@ -270,8 +234,7 @@ void toHE(const MeshObj * mesh){
 	}
 	for (int i = 0; i < HEMesh->edge.size(); i++)
 	{
-        HE_edge * e = findPairEdge(HEMesh,HEMesh->edge[i]);
-		HEMesh->edge[i]->pair =  e;
+		HEMesh->edge[i]->pair = findPairEdge(HEMesh,HEMesh->edge[i]);
 	}
 
 }
@@ -367,7 +330,6 @@ void loopSubdivision(HE_mesh* HEmesh,HE_mesh *submesh){
         submesh->edge.push_back(newEdge[0]);
         submesh->edge.push_back(newEdge[1]);
         submesh->edge.push_back(newEdge[2]);
-        ComputeNormal1(face);
         submesh->face.push_back(face);
 
         edge = edge->next;
@@ -391,7 +353,6 @@ void loopSubdivision(HE_mesh* HEmesh,HE_mesh *submesh){
         submesh->edge.push_back(newEdge[0]);
         submesh->edge.push_back(newEdge[1]);
         submesh->edge.push_back(newEdge[2]);
-        ComputeNormal1(face);
         submesh->face.push_back(face);
 
 
@@ -416,7 +377,6 @@ void loopSubdivision(HE_mesh* HEmesh,HE_mesh *submesh){
         submesh->edge.push_back(newEdge[0]);
         submesh->edge.push_back(newEdge[1]);
         submesh->edge.push_back(newEdge[2]);
-        ComputeNormal1(face);
         submesh->face.push_back(face);
 
         edge = edge->next;
@@ -443,24 +403,11 @@ void loopSubdivision(HE_mesh* HEmesh,HE_mesh *submesh){
         submesh->edge.push_back(newEdge[0]);
         submesh->edge.push_back(newEdge[1]);
         submesh->edge.push_back(newEdge[2]);
-        ComputeNormal1(face);
         submesh->face.push_back(face);
 
     }
-	for (int i = 0; i < submesh->edge.size(); i++)
-	{
-        if(submesh->edge[i]->pair == NULL){
-		    submesh->edge[i]->pair = findPairEdge(submesh,submesh->edge[i]);
-            if(submesh->edge[i]->pair)
-                submesh->edge[i]->pair->pair =submesh->edge[i];
-	    }
-        if(submesh->edge[i]->vert->edge == NULL){
-            submesh->edge[i]->vert->edge = submesh->edge[i];
-        }
-    }
+
 }
-
-
 
 void ComputeNormal(MeshObj &meshobj, FaceObj &face) {
 	face.normal[0] = face.normal[1] = face.normal[2] = 0;
@@ -487,7 +434,35 @@ void ComputeNormal(MeshObj &meshobj, FaceObj &face) {
 	}
 }
 
-MeshObj * ReadObjFile( const char * filename ) {
+void ComputeNormal1(MeshObj &meshobj, FaceObj &face) {
+	face.normal[0] = face.normal[1] = face.normal[2] = 0;
+
+	Vertex *v1 = &meshobj.verts[face.verts[0]];
+	Vertex *v2 = &meshobj.verts[face.verts[1]];
+	Vertex *v3 = &meshobj.verts[face.verts[2]];
+    v1->x = v2->x-v1->x;
+    v1->y = v2->y-v1->y;
+    v1->z = v2->z-v1->z;
+    v2->x = v2->x-v1->x;
+    v2->y = v2->y-v3->y;
+    v2->z = v2->z-v3->z;
+    face.normal[0] = v1->y * v2->z - v1->z * v2->y;
+    face.normal[1] = v1->z * v2->x - v1->x * v2->z;
+    face.normal[2] = v1->x * v2->y - v1->y * v2->x;
+	// Normalize normal for face
+	float squared_normal_length = 0.0;
+	squared_normal_length += face.normal[0] * face.normal[0];
+	squared_normal_length += face.normal[1] * face.normal[1];
+	squared_normal_length += face.normal[2] * face.normal[2];
+	float normal_length = sqrt(squared_normal_length);
+	if (normal_length > 1.0E-6) {
+		face.normal[0] /= normal_length;
+		face.normal[1] /= normal_length;
+		face.normal[2] /= normal_length;
+	}
+}
+
+MeshObj * ReadObjFile(const char * filename ) {
 	FILE *fp;
 	if (!(fp = fopen(filename, "r"))) {
 		fprintf(stderr, "Unable to open file %s\n", filename);
@@ -672,11 +647,8 @@ void GLUTRedrawObj(void)
 	static GLfloat light1_position[] = { -3.0, -2.0, -3.0, 0.0 };
 	glLightfv(GL_LIGHT1, GL_POSITION, light1_position);
 
-    //glEnable(GL_TEXTURE_2D);
-    glBindTexture(GL_TEXTURE_2D,tex);
-
 	// Set material
-	static GLfloat material[] = { 0.8, 0.8, 0.8, 0.5 };
+	static GLfloat material[] = { 0.5, 1.0, 0.5, 0.5 };
 	glMaterialfv(GL_FRONT, GL_AMBIENT_AND_DIFFUSE, material);
 	Vertex *vert = NULL;
 	NormalVector *vn = NULL;
@@ -684,19 +656,19 @@ void GLUTRedrawObj(void)
 	// Draw faces
 	//for (int i = 0; i < meshObj->nfaces; i++) {
     glPolygonMode(GL_FRONT_AND_BACK,GL_FILL);
-	for (int i = 0; i < newHE[simNum]->face.size(); i++) {
-       // int n = newHE[simNum]->face.size();
+	for (int i = 0; i < newHE->face.size(); i++) {
+       // int n = newHE->face.size();
        // material[0] = 1.0-i*1.0/n;
        // material[1] = 1.0-i*1.0/n;
        // material[2] = 1.0-i*1.0/n;
-       //material[3] = 0.5;//{ 0.5, 1.0, 0.5, 0.5 };
-	  // glMaterialfv(GL_FRONT, GL_AMBIENT_AND_DIFFUSE, material);
+        //material[3] = 0.5;//{ 0.5, 1.0, 0.5, 0.5 };
+	    //glMaterialfv(GL_FRONT, GL_AMBIENT_AND_DIFFUSE, material);
        // glColor3f(1.0-1.0/(i+1),1.0-1.0/(i+1),1.0-1.0/(i+1));
-		//FaceObj& face = meshObj->faces[i];
+		FaceObj& face = meshObj->faces[i];
        // HE_face * f = HEMesh->face[i];
-        HE_face * f = newHE[simNum]->face[i];
+        HE_face * f = newHE->face[i];
 		glBegin(GL_POLYGON);
-        glNormal3f(f->normal[0], f->normal[1], f->normal[2]);
+        glNormal3f(face.normal[0], face.normal[1], face.normal[2]);
 /*
 		for (int j = 0; j < face.nverts; j++) {
 			if (meshObj->vn.size() > 0) {
@@ -817,7 +789,7 @@ Mesh *ReadOffFile(const char *filename)
 				// Allocate memory for mesh
 				mesh->verts = new Vertex[nverts];
 				assert(mesh->verts);
-				mesh->faces = new face[nfaces];
+				mesh->faces = new Face[nfaces];
 				assert(mesh->faces);
 			}
 		}
@@ -832,7 +804,7 @@ Mesh *ReadOffFile(const char *filename)
 		}
 		else if (mesh->nfaces < nfaces) {
 			// Get next face
-			face& face = mesh->faces[mesh->nfaces++];
+			Face& face = mesh->faces[mesh->nfaces++];
 
 			// Read number of vertices in face
 			bufferp = strtok(bufferp, " \t");
@@ -944,7 +916,7 @@ void GLUTRedraw(void)
 
 	// Draw faces
 	for (int i = 0; i < mesh->nfaces; i++) {
-		face& face = mesh->faces[i];
+		Face& face = mesh->faces[i];
 		glBegin(GL_POLYGON);
 		glNormal3fv(face.normal);
 		for (int j = 0; j < face.nverts; j++) {
@@ -957,6 +929,7 @@ void GLUTRedraw(void)
 	// Swap buffers
 	glutSwapBuffers();
 }
+
 
 
 void GLUTStop(void)
@@ -1067,27 +1040,6 @@ void GLUTKeyboard(unsigned char key, int x, int y)
 	case 'q':
 		GLUTStop();
 		break;
-	case 'w':
-    case 'W':
-        if(!strcmp(mode,"sub")){
-	    	simNum = (simNum+1)%5;
-            if(newHE[simNum] == NULL){
-                newHE[simNum] = new HE_mesh();
-                loopSubdivision(newHE[simNum-1],newHE[simNum]);
-            }
-
-        }
-		break;
-    case 's':
-    case 'S':
-        if(!strcmp(mode,"sub")){
-		    simNum = (simNum-1)%5;
-            if(newHE[simNum] == NULL){
-                newHE[simNum] = new HE_mesh();
-                loopSubdivision(newHE[simNum-1],newHE[simNum]);
-            }
-        }
-		break;
 
 	case 27: // ESCAPE
 		GLUTStop();
@@ -1115,17 +1067,12 @@ void GLUTInit(int *argc, char **argv)
 
 	// Initialize GLUT callback functions
 	glutReshapeFunc(GLUTResize);
-    if(!strcmp(mode,"sub")){
-
-
-	    if(objoroff == 1)
-		    glutDisplayFunc(GLUTRedrawObj);
-	    else if(0 == objoroff)
-    	{
-	    	glutDisplayFunc(GLUTRedraw);
-    	}
-    }
-
+	if(objoroff == 1)
+		glutDisplayFunc(GLUTRedrawObj);
+	else if(0 == objoroff)
+	{
+		glutDisplayFunc(GLUTRedraw);
+	}
 	glutKeyboardFunc(GLUTKeyboard);
 	glutSpecialFunc(GLUTSpecial);
 	glutMouseFunc(GLUTMouse);
@@ -1199,9 +1146,7 @@ ParseArgs(int argc, char **argv)
 	while (argc > 0) {
 		if ((*argv)[0] == '-') {
 			if (!strcmp(*argv, "-help")) { print_usage = 1; }
-			else if(!strcmp(*argv, "-s")){mode = "sub";}
-			else if(!strcmp(*argv, "-i")){mode = "sim";}
-            else{ fprintf(stderr, "Invalid program argument: %s", *argv); exit(1); }
+			else { fprintf(stderr, "Invalid program argument: %s", *argv); exit(1); }
 			argv++; argc--;
 		}
 		else {
@@ -1213,7 +1158,7 @@ ParseArgs(int argc, char **argv)
 
 	// Check filename
 	if (!filename || print_usage) {
-		printf("Usage: off -[s][i] <filename>\n");
+		printf("Usage: offviewer <filename>\n");
 		return 0;
 	}
 
@@ -1242,45 +1187,43 @@ main(int argc, char **argv)
 	// Initialize GLUT
 
 
-    if(!strcmp(mode,"sub")){
-        // Parse program arguments
-        if (strstr(filename,".off"))
-        {
-            objoroff = 0;
-            GLUTInit(&argc, argv);
-            mesh = ReadOffFile(filename);
-            if (!mesh) exit(1);
-            GLUTMainLoop();
-        }
-        else if (strstr(filename, ".obj"))
-        {
-            objoroff = 1;
-            GLUTInit(&argc, argv);
-            ReadObjFile(filename);
-            toHE(meshObj);
-            newHE[0] = HEMesh;
-            tex = load_texture("bmp/flash08.bmp");
 
-            //newHE[simNum] = new HE_mesh();
-            //loopSubdivision(HEMesh,newHE[simNum]);
+	// Parse program arguments
+	if (strstr(filename,".off"))
+	{
+		objoroff = 0;
+		GLUTInit(&argc, argv);
+		mesh = ReadOffFile(filename);
+		if (!mesh) exit(1);
+		GLUTMainLoop();
+	}
+	else if (strstr(filename, ".obj"))
+	{
+		objoroff = 1;
+		GLUTInit(&argc, argv);
+		ReadObjFile(filename);
+		toHE(meshObj);
 
-            /*for(int i =0;i < HEMesh->face.size();i++){
+        newHE = new HE_mesh();
+        loopSubdivision(HEMesh,newHE);
 
-                HE_face * f = HEMesh->face[i];
+        /*for(int i =0;i < HEMesh->face.size();i++){
 
-                HE_edge * e = f->edge;
-                do{
-                    cout<<e->vert->x<<"\t";
-                    cout<<e->vert->y<<"\t";
-                    cout<<e->vert->z<<"\t";
-                    e = e->next;
-                }
-                while(e != f->edge);
-                cout<<endl;
-            }*/
-                GLUTMainLoopObj();
-        }
-    }
+            HE_face * f = HEMesh->face[i];
+
+            HE_edge * e = f->edge;
+            do{
+                cout<<e->vert->x<<"\t";
+                cout<<e->vert->y<<"\t";
+                cout<<e->vert->z<<"\t";
+                e = e->next;
+            }
+            while(e != f->edge);
+            cout<<endl;
+        }*/
+		    GLUTMainLoopObj();
+	}
+
 	// Return success
 	return 0;
 }
